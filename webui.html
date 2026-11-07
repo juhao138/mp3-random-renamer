@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MP3 随机数字改名器</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --card:#fff; --line:#dcdfe4; --text:#1f2329; --muted:#6b7280;
+    --blue:#1f6feb; --green:#177245; --purple:#6b3fa0; --orange:#a05a00; --red:#b00020;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.5 -apple-system,"Segoe UI","Microsoft YaHei UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+  .wrap{max-width:980px;margin:0 auto;padding:16px}
+  h1{font-size:17px;margin:0 0 14px;font-weight:600}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .row+.row{margin-top:10px}
+  label{color:var(--muted);font-size:13px;white-space:nowrap}
+  input[type=text],input[type=number]{
+    border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit;background:#fff;color:inherit}
+  input[type=text]{flex:1;min-width:240px}
+  input[type=number]{width:72px;text-align:center}
+  button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 14px;
+         font:inherit;cursor:pointer;color:inherit}
+  button:hover{background:#f0f2f5}
+  button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  button.primary:hover{filter:brightness(1.06)}
+  button.danger{color:var(--red)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .log{height:300px;overflow:auto;background:#fbfbfb;border:1px solid var(--line);border-radius:8px;
+       padding:10px;font:12.5px/1.6 Consolas,Menlo,monospace;white-space:pre-wrap;word-break:break-all}
+  .l-i{color:#2b2b2b}
+  .l-r{color:var(--green)}
+  .l-p{color:var(--purple)}
+  .l-s{color:var(--blue)}
+  .l-w{color:var(--orange)}
+  .l-h{color:var(--blue);font-weight:600}
+  .status{color:var(--muted);font-size:13px;margin-top:8px;min-height:20px}
+  .hint{color:var(--muted);font-size:12px}
+  #modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;padding:20px}
+  #modal.on{display:flex}
+  #picker{background:#fff;border-radius:10px;width:min(640px,100%);max-height:80vh;display:flex;flex-direction:column}
+  #picker .head{padding:12px 14px;border-bottom:1px solid var(--line);font-weight:600}
+  #picker .path{padding:8px 14px;color:var(--muted);font-size:12.5px;word-break:break-all;border-bottom:1px solid var(--line)}
+  #picker .list{overflow:auto;flex:1;padding:6px 0}
+  #picker .item{padding:7px 14px;cursor:pointer}
+  #picker .item:hover{background:#eef2f8}
+  #picker .foot{padding:12px 14px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+  @media (max-width:640px){ input[type=text]{min-width:0} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>MP3 随机数字改名器 <span class="hint" id="ver"></span></h1>
+
+  <div class="card">
+    <div class="row">
+      <label>文件夹</label>
+      <input type="text" id="path" placeholder="例如 /Users/you/Music 或 D:\CloudMusic">
+      <button onclick="openPicker()">浏览…</button>
+      <button onclick="checkFolder()">检查</button>
+    </div>
+    <div class="status" id="info"></div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <label>改名方式</label>
+      <label><input type="radio" name="mode" value="prefix" checked> 加在原名前（保留原名）</label>
+      <label><input type="radio" name="mode" value="replace"> 只保留数字</label>
+      <label style="margin-left:auto">分隔符</label>
+      <input type="text" id="sep" value="_" style="width:56px;text-align:center">
+      <span class="hint" id="example">例：123456_歌名.mp3</span>
+    </div>
+    <div class="row">
+      <label>位数</label><input type="number" id="digits" value="9" min="1" max="18">
+      <label>扫描间隔</label><input type="number" id="interval" value="1" min="0.2" max="3600" step="0.5"><label>秒</label>
+      <label style="margin-left:auto"><input type="checkbox" id="recursive"> 含子文件夹</label>
+      <label><input type="checkbox" id="dry"> 试运行</label>
+      <label><input type="checkbox" id="reprocess"> 重新处理已改名的</label>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <button class="primary" id="btnOnce" onclick="runOnce()">只执行一次</button>
+      <button class="primary" id="btnWatch" onclick="watchStart()">开始监测</button>
+      <button id="btnStop" onclick="watchStop()" disabled>停止</button>
+      <button onclick="restore()">恢复原名</button>
+      <button onclick="clearLog()" style="margin-left:auto">清空日志</button>
+      <button class="danger" onclick="quit()">退出</button>
+    </div>
+    <div class="status" id="status">就绪</div>
+  </div>
+
+  <div class="card" style="padding:10px">
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<div id="modal" onclick="if(event.target===this)closePicker()">
+  <div id="picker">
+    <div class="head">选择文件夹</div>
+    <div class="path" id="pickPath"></div>
+    <div class="list" id="pickList"></div>
+    <div class="foot">
+      <button onclick="pickParent()">上一级</button>
+      <button class="primary" onclick="pickHere()">选择此文件夹</button>
+      <button onclick="closePicker()">取消</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let logCursor = 0, pollTimer = null, pickCur = "";
+
+function mode(){ return document.querySelector('input[name=mode]:checked').value; }
+
+function refreshExample(){
+  const sep = $('sep').value;
+  $('example').textContent = mode() === 'replace' ? '例：123456.mp3' : '例：123456' + sep + '歌名.mp3';
+}
+document.querySelectorAll('input[name=mode]').forEach(r => r.onchange = refreshExample);
+$('sep').oninput = refreshExample;
+
+function opts(){
+  return {
+    path: $('path').value.trim(),
+    mode: mode(),
+    sep: $('sep').value,
+    digits: parseInt($('digits').value || '9', 10),
+    interval: parseFloat($('interval').value || '1'),
+    recursive: $('recursive').checked ? 1 : 0,
+    dry_run: $('dry').checked ? 1 : 0,
+    reprocess: $('reprocess').checked ? 1 : 0
+  };
+}
+
+async function api(path, body){
+  const r = await fetch(path, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)} : undefined);
+  try { return await r.json(); } catch(e){ return {ok:false, error:'服务器无响应'}; }
+}
+
+function addLine(level, text){
+  const d = document.createElement('div');
+  d.className = 'l-' + level;
+  d.textContent = text;
+  $('log').appendChild(d);
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+function clearLog(){ $('log').innerHTML = ''; }
+
+async function pullLog(){
+  const r = await api('/api/log?since=' + logCursor);
+  if (!r.ok) return;
+  for (const it of r.lines) addLine(it.l, it.t);
+  logCursor = r.next;
+}
+
+async function poll(){
+  const s = await api('/api/status');
+  if (s.ok){
+    $('btnOnce').disabled = s.busy;
+    $('btnWatch').disabled = s.busy;
+    $('btnStop').disabled = !s.running;
+    $('status').textContent = s.text;
+  }
+  await pullLog();
+}
+
+function setStatus(t){ $('status').textContent = t; }
+
+async function checkFolder(){
+  const p = $('path').value.trim();
+  if (!p) { setStatus('先选个文件夹'); return; }
+  const r = await api('/api/info?path=' + encodeURIComponent(p));
+  if (!r.ok){ $('info').textContent = ''; setStatus(r.error || '检查失败'); return; }
+  $('info').textContent = `${r.mp3} 个 mp3 · 已用编号 ${r.used} 个 · 原名记录 ${r.orig} 条 · 内容指纹 ${r.fps} 条`
+    + (r.writable ? '' : ' · ⚠ ' + r.writable);
+}
+
+async function runOnce(){
+  const o = opts();
+  if (!o.path){ setStatus('先选个文件夹'); return; }
+  setStatus('正在执行…');
+  const r = await api('/api/run', o);
+  if (!r.ok){ setStatus(r.error || '执行失败'); await pullLog(); return; }
+  setStatus(`完成，共处理 ${r.processed} 个文件`);
+  await pullLog();
+  await checkFolder();
+}
+
+async function watchStart(){
+  const o = opts();
+  if (!o.path){ setStatus('先选个文件夹'); return; }
+  const r = await api('/api/watch', Object.assign({action:'start'}, o));
+  if (!r.ok){ setStatus(r.error || '启动失败'); return; }
+  setStatus('监测中…');
+  await poll();
+}
+
+async function watchStop(){
+  const r = await api('/api/watch', {action:'stop'});
+  if (r.ok) setStatus('已停止');
+  await poll();
+}
+
+async function restore(){
+  const o = opts();
+  if (!o.path){ setStatus('先选个文件夹'); return; }
+  const tip = o.dry_run
+    ? '试运行：只显示会还原成什么，不动文件。继续？'
+    : '将把本程序改过名的文件还原成原始文件名。\n\n这是真实改名，确定继续吗？';
+  if (!confirm(tip)) return;
+  setStatus('正在恢复…');
+  const r = await api('/api/restore', o);
+  if (!r.ok){ setStatus(r.error || '恢复失败'); await pullLog(); return; }
+  setStatus(`恢复完成，共 ${r.restored} 个文件`);
+  await pullLog();
+  await checkFolder();
+}
+
+async function quit(){
+  if (!confirm('关闭程序？关掉后这个页面就不能用了。')) return;
+  await api('/api/quit', {});
+  document.body.innerHTML = '<div class="wrap"><h1>程序已退出，可以关掉这个标签页了。</h1></div>';
+}
+
+/* --------- 目录选择 --------- */
+async function openPicker(){
+  const r = await api('/api/list?path=' + encodeURIComponent($('path').value.trim()));
+  if (!r.ok){ setStatus(r.error || '无法浏览'); return; }
+  renderPicker(r);
+  $('modal').classList.add('on');
+}
+function closePicker(){ $('modal').classList.remove('on'); }
+function renderPicker(r){
+  pickCur = r.path;
+  $('pickPath').textContent = r.path;
+  const list = $('pickList');
+  list.innerHTML = '';
+  if (!r.dirs.length){
+    const d = document.createElement('div');
+    d.className = 'item'; d.style.color = '#999'; d.textContent = '（没有子文件夹）';
+    list.appendChild(d);
+  }
+  for (const name of r.dirs){
+    const d = document.createElement('div');
+    d.className = 'item';
+    d.textContent = '📁 ' + name;
+    d.onclick = async () => {
+      const rr = await api('/api/list?path=' + encodeURIComponent(joinPath(pickCur, name)));
+      if (rr.ok) renderPicker(rr);
+    };
+    list.appendChild(d);
+  }
+}
+function joinPath(base, name){
+  if (!base) return name;
+  return base.endsWith('/') || base.endsWith('\\') ? base + name : base + (base.indexOf('\\') >= 0 ? '\\' : '/') + name;
+}
+async function pickParent(){
+  const r = await api('/api/list?path=' + encodeURIComponent(pickCur));
+  if (r.ok && r.parent) {
+    const rr = await api('/api/list?path=' + encodeURIComponent(r.parent));
+    if (rr.ok) renderPicker(rr);
+  }
+}
+function pickHere(){
+  $('path').value = pickCur;
+  closePicker();
+  checkFolder();
+}
+
+$('path').onchange = checkFolder;
+poll();
+setInterval(poll, 900);
+</script>
+</body>
+</html>

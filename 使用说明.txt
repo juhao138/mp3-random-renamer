@@ -1,0 +1,227 @@
+MP3 随机数字改名器 —— 使用说明
+================================
+
+【三个版本，任选其一】
+
+0) mp3rn.exe（C 版，命令行）        ← 246 KB，无任何运行时依赖
+   功能和下面的图形版一致，共用同一个状态文件，两个版本可以混着用。
+   适合：想要极简/可脚本化、或者压根不想装 Python。
+   用法见文末「C 版（命令行）」一节。
+
+1) MP3随机数字改名器.exe          ← 单文件图形界面，双击即用
+   体积 11 MB，启动时会先把自身解包到系统临时目录（约 1~2 秒）。
+   首次运行若 Windows 弹“已保护你的电脑 / 未知发布者”，这是未签名程序的正常提示：
+   点「更多信息」→「仍要运行」。
+
+2) MP3随机数字改名器_便携版.zip    ← 解压后双击里面的 exe
+   免安装、免解包，启动更快，也不容易被杀软误报；
+   代价是解压出来是一个约 950 个文件的文件夹，要整个留着别拆散。
+
+图形版的 1 和 2 功能完全一样，C 版是同一套逻辑的命令行实现。
+
+
+【怎么用】
+
+1. 选文件夹（可直接粘贴路径，或点「浏览…」）
+2. 设置：改名方式（加在原名前 / 只保留数字）、分隔符、随机数字位数、扫描间隔
+3. 点「开始监测」——之后丢进这个文件夹的 mp3 会被立刻改名
+   例：周杰伦 - 稻香.mp3  →  612389034_周杰伦 - 稻香.mp3
+4. 「停止」结束监测；「只执行一次」只扫一遍
+
+只处理 .mp3（大小写不敏感），其它文件不动；默认不递归子文件夹（可勾选）。
+设置会自动记住。
+
+
+【恢复原名】
+
+界面上点「恢复原名」，确认后会把本程序改过名的 mp3 还原：
+
+    612389034_周杰伦 - 稻香.mp3  →  周杰伦 - 稻香.mp3
+
+能恢复到什么程度，取决于有没有记录：
+
+  · 本版本改过的文件：状态文件里记着“新名 → 原名”，精确还原，一个不错
+  · 文件被手动改过名、或又换了一轮编号：靠「内容指纹」认人
+    （大小 + 首尾各 512KB 的 sha256），认出来就能还原到最早的原名
+  · 老版本改过的文件：只能按前缀推断，摘「≥6 位的数字前缀」
+    （3~5 位的短前缀不敢乱摘，因为可能就是歌名自带的 01_、2024_；
+     确实需要时可在命令行加 --restore-any 强制摘）
+  · 完全没记录、又是纯数字名（如 123456.mp3）：找不回来，日志会列出来
+
+关于内容指纹：
+  · 每改一个文件记一条，1000 首大约 100KB 状态体积
+  · 按 8MB 一首算，每个文件多读约 1MB，1000 首首次运行多花 3~5 秒
+  · 只读首尾各 512KB，不做全量 sha256——全量要 70ms/首，1000 首要一分多钟
+
+原名如果已经被别的文件占用，会自动加 (2)(3) 后缀，不会覆盖。
+恢复后这些编号会归还，可以重复使用。
+
+命令行：
+
+    MP3随机数字改名器.exe "D:\Music" --restore --dry-run    先看看会改回什么
+    MP3随机数字改名器.exe "D:\Music" --restore              真的恢复
+    MP3随机数字改名器.exe "D:\Music" --restore --sep _       指定分隔符（默认会试 _ - 和空）
+
+
+【已经改过名的歌，为什么不再动了？】
+
+这是故意的保护，不是没检测到。被监测的文件夹里有个隐藏文件
+    .mp3_random_renamer_state.json
+它记着“哪些文件名是本程序生成的”。再次运行时，这些文件会被直接跳过，
+否则每跑一次就会再叠一层数字（123_456_歌名.mp3）。
+
+要重新编号（比如位数想从 9 位改成 6 位、或者想换一批号），两种办法：
+
+  · 勾选「重新处理已改名的文件（摘掉旧数字，换新编号）」，再开始
+  · 命令行加 --reprocess：
+        MP3随机数字改名器.exe "D:\Music" --once --reprocess
+
+重建编号时只会摘掉“本程序发过的号”，`2024 演唱会.mp3` 这种自带数字的名字
+不会被误伤。本次运行刚改出来的文件也不会被同一轮再次改名。
+
+
+【写不进去怎么办】
+
+程序开跑前会真的在目标文件夹里试一次“建文件→改名→删除”。
+如果失败会直接弹窗，常见原因：
+
+  · 程序运行在受限环境/沙箱里 —— 直接在资源管理器里双击 exe 运行
+  · 杀毒软件「受控文件夹访问」拦住了未签名程序
+  · 文件夹/磁盘是只读的，或当前账号没有写权限
+  · 文件被云盘/同步工具锁住
+
+日志里的错误码：5 = 拒绝访问，32 = 文件被占用。
+
+
+【命令行参数】
+
+    MP3随机数字改名器.exe "D:\Music" --start                 打开就自动开始监测
+    MP3随机数字改名器.exe "D:\Music" --once                  打开只扫一遍就完事
+    MP3随机数字改名器.exe "D:\Music" --once --reprocess       把已改过名的重新编号
+    MP3随机数字改名器.exe "D:\Music" --restore --dry-run      预览恢复原名
+
+
+【配置存哪】
+
+优先 %APPDATA%\mp3_random_renamer\gui.json；
+写不进去时退回程序同目录的 gui_config.json。
+
+
+【C 版（命令行）】
+
+文件：mp3rn.exe（246 KB）、mp3rn.c（源码）、mp3rn-linux-x64、mp3rn-android-arm64
+
+和图形版共用同一份状态文件 .mp3_random_renamer_state.json，
+所以两个版本可以交替使用，不会互相踩。
+
+常用：
+
+    mp3rn.exe "D:\CloudMusic" --once                 扫一遍就退出
+    mp3rn.exe "D:\CloudMusic"                      常驻监测（Ctrl+C 停止）
+    mp3rn.exe "D:\CloudMusic" --digits 6 --once      6 位数字
+    mp3rn.exe "D:\CloudMusic" --once --reprocess     已改过名的重新编号
+    mp3rn.exe "D:\CloudMusic" --restore --dry-run    预览恢复原名
+    mp3rn.exe "D:\CloudMusic" --restore              真的恢复
+    mp3rn.exe "D:\CloudMusic" --sep= --once          不加分隔符（--sep= 写法）
+
+全部参数：mp3rn.exe --help
+
+
+【C 版（原生 Win32 界面，仅 Windows）】
+
+文件：mp3rn-winningui.exe（293 KB）
+
+真正的 Windows 原生窗口（Win32 + 系统控件，不依赖任何运行库或框架），
+扁平化外观：激活系统视觉样式、圆角扁平按钮（悬停/按下反馈）、1px 细边框
+输入框、无分组框无 3D 效果。
+
+功能跟网页版一致：选文件夹、选项、单次执行 / 开始监测 / 停止 / 恢复原名、
+彩色日志、底部状态栏。任务在后台线程跑，界面不会卡。
+
+    mp3rn-winningui.exe                    直接打开
+    mp3rn-winningui.exe "D:\Music"         打开并预填文件夹
+
+日志颜色：绿色=改名，紫色=试运行预览，橙色=警告，蓝色=阶段标题。
+停止：点「停止」按钮（单次执行跑得很快，一般用不上）。
+关窗口时如果还有任务在跑，会先问一句。
+
+图标：内嵌在 exe 里（RT_GROUP_ICON），资源管理器、任务栏、标题栏都显示同一个
+音符图标。三个 Windows 程序（命令行版 / 网页版 / Win32 版）都带了。
+
+没有黑色控制台窗口：Win32 版链接时用了 Windows 子系统
+（-Wl,--subsystem,windows），双击只出一个窗口。
+命令行版和网页版是有意保留控制台的——它们要靠它输出信息（网页版会打印访问地址）。
+
+自己编译：
+
+    python _build/make_res.py          # 由 _build/app.ico 生成图标资源 _build/app.res
+    zig cc -O2 -std=c11 -Wl,--subsystem,windows -Wl,-e,mainCRTStartup `
+           -o mp3rn-winningui.exe mp3rn_win32.c _build/app.res `
+           -lshell32 -lole32 -lcomctl32 -luuid -lgdi32 -luser32
+
+
+【C 版（网页界面，三平台通用）】
+
+文件：mp3rn-gui.exe（269 KB）Windows
+      mp3rn-gui-linux-x64（1.8 MB）Linux 静态
+      mp3rn-gui-android-arm64（2.0 MB）ARM64 静态
+
+界面怎么来的：程序在 127.0.0.1 上起一个只监听本机的小服务，用默认浏览器当界面。
+不依赖任何 GUI 框架，所以 Windows / macOS / Linux / 安卓用的是同一份源码，
+也不需要安装 Qt、GTK 之类的东西。
+
+用法：
+
+    mp3rn-gui.exe                    起服务并自动打开浏览器
+    mp3rn-gui.exe --port 8080        指定端口
+    mp3rn-gui.exe --no-browser       只起服务（自己开浏览器访问打印出来的地址）
+
+界面里能做的：选文件夹（自带目录浏览）、设改名方式/分隔符/位数/间隔、
+勾选递归/试运行/重新处理、单次执行、开始监测、停止、恢复原名、看彩色日志。
+
+注意：服务只绑定 127.0.0.1，外部访问不到；关掉程序（或点界面上的「退出」）就没了。
+
+各平台跑法：
+
+    # Windows
+    mp3rn-gui.exe
+
+    # Linux（静态二进制，不依赖系统库）
+    chmod +x mp3rn-gui-linux-x64 && ./mp3rn-gui-linux-x64
+
+    # 安卓（Termux）
+    chmod +x mp3rn-gui-android-arm64 && ./mp3rn-gui-android-arm64
+    # 手机上没有 xdg-open 也没关系，程序会打印出地址，手动在浏览器打开即可
+
+macOS 没有预编译产物（这台机器编不了苹果的目标），在自己 Mac 上一条命令即可：
+
+    cc -O2 -std=c11 -o mp3rn-gui mp3rn_gui.c
+    ./mp3rn-gui
+
+自己编译（推荐 Zig，单文件无需安装）：
+
+    zig cc -O2 -std=c11 -o mp3rn.exe mp3rn.c -lshell32                      # Windows CLI
+    zig cc -O2 -std=c11 -o mp3rn-gui.exe mp3rn_gui.c -lshell32 -lws2_32     # Windows GUI
+    zig cc -O2 -std=c11 -target x86_64-linux-musl -static -o mp3rn mp3rn.c
+    zig cc -O2 -std=c11 -target x86_64-linux-musl -static -pthread -o mp3rn-gui mp3rn_gui.c
+    zig cc -O2 -std=c11 -target aarch64-linux-musl -static -pthread -o mp3rn-gui-arm mp3rn_gui.c
+
+改界面：编辑 webui.html，然后 _build/embed_webui.py 重新生成 webui_html.h 再编译。
+一键重编所有产物：python _build/build_c.py
+
+用 Android NDK 编译成纯安卓可执行文件：
+
+    $NDK/toolchains/llvm/prebuilt/windows-x86_64/bin/aarch64-linux-android21-clang \
+        -O2 -o mp3rn-android mp3rn.c
+
+
+【想自己重新打包图形版】
+
+构建脚本都在 _build 目录（PyInstaller 及其依赖已解包在 _build\pylib）：
+
+    cd _build
+    set PYTHONPATH=%cd%\pylib
+    python build_exe.py                                   # 单文件版
+    python build_exe.py --onedir --dist dist_portable     # 文件夹版
+
+需要 Python 3.8+（带 tkinter）与网络（首次抓取 wheel 用 _build\fetch_wheels.py）。
